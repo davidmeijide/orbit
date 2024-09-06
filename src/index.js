@@ -12,7 +12,7 @@ const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
   0.1,
-  1000000000
+  100000000
 );
 const earthRadius = 6371000; // Earth's radius in meters
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -54,7 +54,7 @@ function generateLights() {
 
 // Function to create satellite meshes
 function createSatelliteMesh(color) {
-  const satelliteGeometry = new THREE.SphereGeometry(0.5e6, 32, 32); // Scale for visibility
+  const satelliteGeometry = new THREE.SphereGeometry(0.2e6, 32, 32); // Scale for visibility
   const satelliteMaterial = new THREE.MeshBasicMaterial({ color });
   const satelliteMesh = new THREE.Mesh(satelliteGeometry, satelliteMaterial);
   scene.add(satelliteMesh);
@@ -87,6 +87,9 @@ function parseTleAndCalculateSatellites(tleFile) {
     // Propagate the satellite's position and velocity
     const positionAndVelocity = satelliteJS.propagate(satrec, now);
 
+    // Log the position and velocity for debugging
+    //console.log("positionAndVelocity:", positionAndVelocity);
+
     if (
       positionAndVelocity.position &&
       !isNaN(positionAndVelocity.position.x)
@@ -95,13 +98,13 @@ function parseTleAndCalculateSatellites(tleFile) {
       const gmst = satelliteJS.gstime(now);
       const ecef = satelliteJS.eciToEcf(eci, gmst);
 
-      // Push satellite data
+      // Push satellite data (convert km to meters)
       satelliteData.push({
         name: satelliteName,
-        x: ecef.x,
-        y: ecef.y,
-        z: ecef.z,
-        semiMajorAxis: satrec.a, // Convert km to meters
+        x: ecef.x * 1000,
+        y: ecef.y * 1000,
+        z: ecef.z * 1000,
+        semiMajorAxis: satrec.a * 1000, // Convert km to meters
         eccentricity: satrec.ecco,
         inclination: satrec.inclo,
         raan: satrec.nodeo,
@@ -126,23 +129,22 @@ function parseTleAndCalculateSatellites(tleFile) {
 // Function to create orbit lines
 function createOrbitLine(satrec, numPoints = 100) {
   const orbitPoints = [];
-  const now = new Date(); // Start from the current time
+  const now = new Date();
   const gmst = satelliteJS.gstime(now);
-
-  // Loop over numPoints to generate the orbit
   for (let j = 0; j < numPoints; j++) {
-    // Calculate the time offset (in minutes)
-    const minutesOffset = (j / numPoints) * ((2 * Math.PI) / satrec.no);
-    const futureDate = new Date(now.getTime() + minutesOffset * 60 * 1000); // Convert minutes to ms
-    console.log(minutesOffset);
-    console.log(futureDate);
-    // Propagate satellite position
-    const positionAndVelocity = satelliteJS.propagate(satrec, futureDate);
+    const minutesSinceEpoch =
+      ((j / numPoints) * ((2 * Math.PI) / satrec.no) * 1440) / (2 * Math.PI); // Time in minutes
+    const positionAndVelocity = satelliteJS.sgp4(
+      satrec,
+      satelliteJS.jday(now) + minutesSinceEpoch / 1440.0
+    );
     const eci = positionAndVelocity.position;
-
+    console.log("eci", eci);
     if (eci) {
-      // Convert from ECI to ECEF using gmst
+      // Convert from ECI to ECEF
       const ecef = satelliteJS.eciToEcf(eci, gmst);
+
+      // Push the new point to the orbitPoints array, converting from km to meters
       orbitPoints.push(
         new THREE.Vector3(ecef.x * 1000, ecef.y * 1000, ecef.z * 1000)
       );
@@ -151,7 +153,10 @@ function createOrbitLine(satrec, numPoints = 100) {
 
   // Create the orbit geometry and material
   const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
-  const orbitMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+  //console.log(orbitPoints);
+  const orbitMaterial = new THREE.LineBasicMaterial({
+    color: 0x00ff00, // Green color for visibility
+  });
 
   // Create the line and add it to the scene
   const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
@@ -173,7 +178,7 @@ function animate() {
 
   // Update satellite positions based on parsed data
   satelliteData.forEach((satellite, index) => {
-    //console.log("satrec", satellite.satrec);
+    console.log("satrec", satellite.satrec);
     const now = new Date();
     const positionAndVelocity = satelliteJS.propagate(satellite.satrec, now);
     const eci = positionAndVelocity.position;
