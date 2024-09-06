@@ -2,8 +2,9 @@ import * as THREE from "three";
 import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
 import * as satelliteJS from "satellite.js";
 
-// Global variable to store satellite data
+// Global variables
 let satelliteData = [];
+const satelliteMeshes = []; // Array to hold satellite meshes
 
 // Three.js scene setup
 const scene = new THREE.Scene();
@@ -53,34 +54,77 @@ function generateLights() {
 
 // Function to create satellite meshes
 function createSatelliteMesh(color) {
-  const satelliteGeometry = new THREE.SphereGeometry(0.5e6, 32, 32); // Scale for visibility
+  const satelliteGeometry = new THREE.SphereGeometry(0.2e6, 32, 32); // Scale for visibility
   const satelliteMaterial = new THREE.MeshBasicMaterial({ color });
   const satelliteMesh = new THREE.Mesh(satelliteGeometry, satelliteMaterial);
   scene.add(satelliteMesh);
   return satelliteMesh;
 }
 
+const MU = 3.986004418e14; // Earth's gravitational parameter in m^3/s^2
+
+// Function to parse TLE file and calculate satellites
 function parseTleAndCalculateSatellites(tleFile) {
-  const tleLines = tleFile.trim().split("\n");
+  const tleLines = tleFile.trim().split("\r\n");
   for (let i = 0; i < tleLines.length; i += 3) {
     const satelliteName = tleLines[i].trim();
     const line1 = tleLines[i + 1];
     const line2 = tleLines[i + 2];
 
     const satrec = satelliteJS.twoline2satrec(line1, line2);
-    const now = new Date();
-    const positionAndVelocity = satelliteJS.propagate(satrec, now);
-    const eci = positionAndVelocity.position;
-    const gmst = satelliteJS.gstime(now);
-    const ecef = satelliteJS.eciToEcf(eci, gmst);
 
+    // Create a satellite mesh and store it
+    const satelliteMesh = createSatelliteMesh(0xffff00);
+    satelliteMeshes.push(satelliteMesh); // Store the mesh for later updates
+
+    // Push satellite data
     satelliteData.push({
       name: satelliteName,
-      x: ecef.x,
-      y: ecef.y,
-      z: ecef.z,
+      satrec,
     });
+
+    // Create the orbit line for the satellite
+    createOrbitLine(satrec);
   }
+  console.log(satelliteData);
+}
+
+// Function to create orbit lines
+function createOrbitLine(satrec, numPoints = 100) {
+  const orbitPoints = [];
+  const now = new Date();
+  const gmst = satelliteJS.gstime(now);
+
+  for (let j = 0; j < numPoints; j++) {
+    const minutesSinceEpoch =
+      ((j / numPoints) * ((2 * Math.PI) / satrec.no) * 1440) / (2 * Math.PI); // Time in minutes
+    const positionAndVelocity = satelliteJS.propagate(
+      satrec,
+      satelliteJS.jday(now) + minutesSinceEpoch / 1440.0
+    );
+    //console.log("positionAndVelocity", positionAndVelocity);
+    const eci = positionAndVelocity.position;
+    if (eci) {
+      // Convert from ECI to ECEF
+      const ecef = satelliteJS.eciToEcf(eci, gmst);
+
+      // Push the new point to the orbitPoints array, converting from km to meters
+      orbitPoints.push(
+        new THREE.Vector3(ecef.x * 1000, ecef.y * 1000, ecef.z * 1000)
+      );
+    }
+  }
+
+  // Create the orbit geometry and material
+  const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+  //console.log(orbitPoints);
+  const orbitMaterial = new THREE.LineBasicMaterial({
+    color: 0x00ff00, // Green color for visibility
+  });
+
+  // Create the line and add it to the scene
+  const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+  scene.add(orbitLine);
 }
 
 // Initialize TrackballControls
@@ -97,30 +141,40 @@ function animate() {
   requestAnimationFrame(animate);
 
   // Update satellite positions based on parsed data
-  satelliteData.forEach((satellite) => {
-    const satelliteMesh = createSatelliteMesh(0x00ff00);
-    satelliteMesh.position.set(satellite.x, satellite.y, satellite.z);
+  satelliteData.forEach((satellite, index) => {
+    const now = new Date();
+    const positionAndVelocity = satelliteJS.propagate(satellite.satrec, now);
+    const eci = positionAndVelocity.position;
+    const gmst = satelliteJS.gstime(now);
+    const ecef = satelliteJS.eciToEcf(eci, gmst);
+
+    satelliteMeshes[index].position.set(
+      ecef.x * 1000,
+      ecef.y * 1000,
+      ecef.z * 1000
+    );
   });
 
   // Render the scene
   renderer.render(scene, camera);
   controls.update();
 }
-
+// Generate lights and earth
 generateLights();
 generateEarth();
 
-fetch("../galileo_tle.txt")
+// Fetch TLE data and start the application
+fetch(
+  "https://raw.githubusercontent.com/davidmeijide/orbit/main/galileo_tle.txt"
+)
   .then((response) => response.text())
   .then((tleData) => {
-    console.log(tleData);
-    //parseTleAndCalculateSatellites(tleData);
+    parseTleAndCalculateSatellites(tleData);
     animate(); // Start the animation loop
   })
   .catch((error) => {
     console.error("Error fetching TLE file:", error);
   });
-// Start the application
 
 // Handle window resize
 window.addEventListener("resize", () => {
