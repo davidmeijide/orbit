@@ -2,6 +2,7 @@ body {
   font-family: "JetBrains Mono", monospace;
   margin: 0;
   padding: 0;
+  background-color: black;
 }
 
 #info {
@@ -12,6 +13,7 @@ body {
   text-align: center;
   z-index: 100;
   display: block;
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
 .first-button {
