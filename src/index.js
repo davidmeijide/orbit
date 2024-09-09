@@ -1,10 +1,11 @@
 import * as THREE from "three";
 import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as satelliteJS from "satellite.js";
 
 // Global variables
-let satelliteData = [];
-const satelliteMeshes = []; // Array to hold satellite meshes
+const satelliteData = [];
+const satelliteMeshes = [];
 
 // Three.js scene setup
 const scene = new THREE.Scene();
@@ -39,7 +40,7 @@ function generateEarth() {
   });
   const earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
   scene.add(earthMesh);
-  earthMesh.rotation.x = -Math.PI / 2; // Rotate 90 degrees around the x-axis
+  //earthMesh.rotation.x = -Math.PI / 2; // Rotate 90 degrees around the x-axis
 }
 
 // Function to generate lights
@@ -123,6 +124,10 @@ function parseTleAndCalculateSatellites(tleFile) {
   }
 }
 
+function fetchAndCreateFilter() {
+  fetch();
+}
+
 // Function to create orbit lines
 function createOrbitLine(satrec, numPoints = 100) {
   const orbitPoints = [];
@@ -158,11 +163,11 @@ function createOrbitLine(satrec, numPoints = 100) {
 }
 
 // Initialize TrackballControls
-const controls = new TrackballControls(camera, renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; // Smooth damping
 controls.dampingFactor = 0.25; // Damping factor
 camera.position.set(earthRadius * 1.7, earthRadius * 1, 0);
-camera.up = new THREE.Vector3(0, 0, -0.1);
+//camera.up = new THREE.Vector3(0, 0, -0.1);
 camera.lookAt(new THREE.Vector3(0, 0, 0));
 controls.update();
 
