@@ -15,11 +15,6 @@ body {
   display: block;
   background-color: rgba(0, 0, 0, 0.5);
 }
-
-.first-button {
-  margin-right: 25px;
-}
-
 /* Button Styling -> https://getcssscan.com/css-buttons-examples */
 
 #controls {
@@ -28,15 +23,48 @@ body {
   border: solid white 1px;
   position: absolute;
   max-width: 20%;
-  min-width: 100px;
+  min-width: 120px;
   padding: 0.7em;
   z-index: 100;
 }
 #controls h2 {
   padding: 2px, 2px, 2px, 2px;
-  margin: 2px;
+  margin-top: 2px;
+  margin-bottom: 2px;
 }
 #controls form {
   display: flex;
   flex-direction: column;
+}
+fieldset {
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+form #time-range {
+  width: 100%;
+}
+label {
+  font-size: larger;
+  font-weight: 600;
+}
+.spread {
+  display: flex;
+  justify-content: space-between;
+  flex-direction: row;
+}
+.spread span {
+  font-size: large;
+}
+#time-speed {
+  vertical-align: bottom;
+}
+#datetime {
+  width: 100%;
+  background-color: transparent;
+  border: none;
+  color-scheme: dark;
 }

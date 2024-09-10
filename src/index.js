@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as satelliteJS from "satellite.js";
 
 // Global variables
 const satelliteData = [];
 const satelliteMeshes = [];
-
+let enabledSettings = [];
+let lastUpdateTime = new Date();
 // Three.js scene setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
@@ -19,6 +19,25 @@ const earthRadius = 6371000; // Earth's radius in meters
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+
+// Earth's axial tilt (in radians, 23.5 degrees)
+const earthTilt = THREE.MathUtils.degToRad(23.5);
+
+// Rotation speed in radians per second for a 24-hour rotation period
+const earthRotationSpeed = (2 * Math.PI) / 86400; // 2*PI radians in 86400 seconds (1 full rotation in 24 hours)
+const earthMesh = generateEarth();
+
+function setupTimeControl() {
+  const value = document.querySelector("#time-speed");
+  const slider = document.querySelector("#time-range");
+  slider.addEventListener("input", (event) => {
+    if (event.target.value == 0) {
+      value.textContent = "Pause";
+    } else {
+      value.textContent = slider.value + "x";
+    }
+  });
+}
 
 // Function to generate the Earth
 function generateEarth() {
@@ -39,8 +58,10 @@ function generateEarth() {
     transparent: false,
   });
   const earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
+  earthMesh.rotation.z = earthTilt; // Tilt the Earth around the Z-axis
   scene.add(earthMesh);
   //earthMesh.rotation.x = -Math.PI / 2; // Rotate 90 degrees around the x-axis
+  return earthMesh;
 }
 
 // Function to generate lights
@@ -67,7 +88,7 @@ function parseTleAndCalculateSatellites(tleFile) {
   const tleLines = tleFile.trim().split("\r\n");
 
   for (let i = 0; i < tleLines.length; i += 3) {
-    const satelliteName = tleLines[i].trim();
+    const satelliteName = tleLines[i].trim().split(" ")[0];
     const line1 = tleLines[i + 1];
     const line2 = tleLines[i + 2];
 
@@ -117,19 +138,84 @@ function parseTleAndCalculateSatellites(tleFile) {
       satelliteMeshes.push(satelliteMesh);
 
       // Create the orbit line
-      createOrbitLine(satrec);
+      createOrbitLine(satrec, satelliteName);
     } else {
       console.error(`Failed to propagate satellite: ${satelliteName}`);
     }
   }
 }
 
-function fetchAndCreateFilter() {
-  fetch();
+function fetchSatelliteStatus() {
+  fetch(
+    "https://raw.githubusercontent.com/davidmeijide/orbit/main/satellite_states.json"
+  )
+    .then((response) => response.json())
+    .then((data) => createFilterEvents(data))
+    .catch(`Error when fetching satellite status`);
+}
+
+function createFilterEvents(data) {
+  const filter = document.querySelector("#filters");
+  const checkboxes = filter.querySelectorAll("input");
+  let enabledSettings = [];
+
+  // Attach event listeners to checkboxes
+  checkboxes.forEach((element) => {
+    element.addEventListener("change", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Update enabledSettings based on checked checkboxes
+      enabledSettings = Array.from(checkboxes)
+        .filter((i) => i.checked) // Filter checked checkboxes
+        .map((i) => i.value); // Get the values of checked checkboxes
+
+      applyFilters();
+    });
+  });
+
+  // Function to apply the filters and show/hide satellite objects
+  function applyFilters() {
+    // Filter the satellite data based on active/inactive status
+    const active_satellites = data
+      .filter((element) => element.is_active == 1)
+      .map((element) => element.id);
+    const inactive_satellites = data
+      .filter((element) => element.is_active == 0)
+      .map((element) => element.id);
+    //console.log(active_satellites);
+    // Traverse the scene and update visibility of satellites
+    scene.traverse((object) => {
+      if (object.name) {
+        // Check if the satellite is active or inactive
+        const isActiveSatellite = active_satellites.includes(object.name);
+        const isInactiveSatellite = inactive_satellites.includes(object.name);
+
+        // Determine the visibility based on active or inactive filter states
+        //console.log("isInactiveSatellite", isInactiveSatellite);
+        //console.log("enabledSettings", enabledSettings);
+        if (
+          (enabledSettings.includes("active") && isActiveSatellite) ||
+          (enabledSettings.includes("inactive") && isInactiveSatellite)
+        ) {
+          object.visible = true;
+          //console.log("object ", object, "is now visible");
+        } else {
+          object.visible = false;
+          //console.log("object ", object, "is now invisible");
+        }
+      }
+    });
+  }
+  enabledSettings = Array.from(checkboxes)
+    .filter((i) => i.checked) // Default checked boxes
+    .map((i) => i.value); // Map to their values
+  // Call applyFilters initially to set up visibility based on the initial state of checkboxes
+  applyFilters();
 }
 
 // Function to create orbit lines
-function createOrbitLine(satrec, numPoints = 100) {
+function createOrbitLine(satrec, satelliteName, numPoints = 100) {
   const orbitPoints = [];
   const now = new Date(); // Start from the current time
   const gmst = satelliteJS.gstime(now);
@@ -139,7 +225,6 @@ function createOrbitLine(satrec, numPoints = 100) {
     // Calculate the time offset (in minutes)
     const minutesOffset = (j / numPoints) * ((2 * Math.PI) / satrec.no);
     const futureDate = new Date(now.getTime() + minutesOffset * 60 * 1000); // Convert minutes to ms
-    console.log(minutesOffset);
     // Propagate satellite position
     const positionAndVelocity = satelliteJS.propagate(satrec, futureDate);
     const eci = positionAndVelocity.position;
@@ -159,6 +244,8 @@ function createOrbitLine(satrec, numPoints = 100) {
 
   // Create the line and add it to the scene
   const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+  orbitLine.name = satelliteName;
+  console.log(orbitLine.name);
   scene.add(orbitLine);
 }
 
@@ -175,13 +262,19 @@ controls.update();
 function animate() {
   requestAnimationFrame(animate);
 
+  const now = Date.now();
+  const deltaTime = (now - lastUpdateTime) / 1000; // Time difference in seconds
+  lastUpdateTime = now;
+  earthMesh.rotation.y += earthRotationSpeed * deltaTime;
   // Update satellite positions based on parsed data
   satelliteData.forEach((satellite, index) => {
     //console.log("satrec", satellite.satrec);
-    const now = new Date();
-    const positionAndVelocity = satelliteJS.propagate(satellite.satrec, now);
-    const eci = positionAndVelocity.position;
-    const gmst = satelliteJS.gstime(now);
+    const propagatedPositionAndVelocity = satelliteJS.propagate(
+      satellite.satrec,
+      new Date()
+    );
+    const eci = propagatedPositionAndVelocity.position;
+    const gmst = satelliteJS.gstime(new Date());
     const ecef = satelliteJS.eciToEcf(eci, gmst);
 
     satelliteMeshes[index].position.set(
@@ -189,6 +282,10 @@ function animate() {
       ecef.y * 1000,
       ecef.z * 1000
     );
+    if (!satelliteMeshes[index].name) {
+      satelliteMeshes[index].name = satellite.name; // Name it to access it later with events
+      //console.log(satelliteMeshes);
+    }
   });
 
   // Render the scene
@@ -198,7 +295,8 @@ function animate() {
 // Generate lights and earth
 generateLights();
 generateEarth();
-
+fetchSatelliteStatus();
+setupTimeControl();
 // Fetch TLE data and start the application
 fetch(
   "https://raw.githubusercontent.com/davidmeijide/orbit/main/galileo_tle.txt"
