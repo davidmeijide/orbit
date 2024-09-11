@@ -11,6 +11,7 @@ let timeSpeed = 1;
 let enabledSettings = [];
 let lastUpdateTime = performance.now();
 let currentDateTime = new Date(); // Default is now
+const gmst = satelliteJS.gstime(currentDateTime);
 
 let directionalLight;
 const displayedDatetime = document.querySelector("#datetime");
@@ -113,9 +114,9 @@ function setSimulationTime(userDateTime) {
       userDateTime
     );
     const eci = positionAndVelocity.position;
-    const gmst = satelliteJS.gstime(userDateTime);
+    //const gmst = satelliteJS.gstime(userDateTime);
     const ecef = satelliteJS.eciToEcf(eci, gmst);
-    //console.log(formatDatetime(userDateTime));
+    console.log(formatDatetime(userDateTime));
     // Update satellite position
     satelliteMeshes[index].position.set(
       ecef.x * 1000, // Convert km to meters
