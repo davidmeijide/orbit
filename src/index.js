@@ -1,12 +1,19 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as satelliteJS from "satellite.js";
+import { formatDatetime } from "./util.js";
 
 // Global variables
 const satelliteData = [];
 const satelliteMeshes = [];
+let isPaused = false;
+let timeSpeed = 1;
 let enabledSettings = [];
-let lastUpdateTime = new Date();
+let lastUpdateTime = performance.now();
+let currentDateTime = new Date(); // Default is now
+
+let directionalLight;
+const displayedDatetime = document.querySelector("#datetime");
 // Three.js scene setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
@@ -20,22 +27,25 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Earth's axial tilt (in radians, 23.5 degrees)
-const earthTilt = THREE.MathUtils.degToRad(23.5);
-
-// Rotation speed in radians per second for a 24-hour rotation period
-const earthRotationSpeed = (2 * Math.PI) / 86400; // 2*PI radians in 86400 seconds (1 full rotation in 24 hours)
 const earthMesh = generateEarth();
 
+//Event listeners
+
 function setupTimeControl() {
-  const value = document.querySelector("#time-speed");
+  const shownValue = document.querySelector("#time-speed");
   const slider = document.querySelector("#time-range");
   slider.addEventListener("input", (event) => {
+    timeSpeed = Math.pow(2, parseFloat(event.target.value));
+    //console.log(timeSpeed);
     if (event.target.value == 0) {
-      value.textContent = "Pause";
+      shownValue.textContent = "Pause";
     } else {
-      value.textContent = slider.value + "x";
+      shownValue.textContent = timeSpeed + "x";
     }
+  });
+  const datetimeInput = document.querySelector("#datetime");
+  datetimeInput.addEventListener("blur", (e) => {
+    setSimulationTime(datetimeInput.value);
   });
 }
 
@@ -58,9 +68,10 @@ function generateEarth() {
     transparent: false,
   });
   const earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
+  // Earth's axial tilt (in radians, 23.5 degrees)
+  const earthTilt = THREE.MathUtils.degToRad(23.5);
   earthMesh.rotation.z = earthTilt; // Tilt the Earth around the Z-axis
   scene.add(earthMesh);
-  //earthMesh.rotation.x = -Math.PI / 2; // Rotate 90 degrees around the x-axis
   return earthMesh;
 }
 
@@ -69,9 +80,58 @@ function generateLights() {
   const ambientLight = new THREE.AmbientLight(0x404040);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+  directionalLight = new THREE.DirectionalLight(0xffffff, 1);
   directionalLight.position.set(30000, 0, 0);
   scene.add(directionalLight);
+}
+
+function updateSunlight(userDateTime) {
+  const daysSinceEpoch =
+    (userDateTime - new Date("2020-01-01T00:00:00Z")) / (1000 * 60 * 60 * 24);
+  const earthOrbitPeriod = 365.25; // Days for a full revolution
+
+  // Calculate the position of the Sun relative to Earth
+  const sunAngle = (daysSinceEpoch / earthOrbitPeriod) * 2 * Math.PI;
+  const sunDistance = 149.6e9; // Distance from Earth to Sun in meters (scaled)
+
+  // Set the light (Sun) position in space
+  directionalLight.position.set(
+    Math.cos(sunAngle) * sunDistance,
+    0,
+    Math.sin(sunAngle) * sunDistance
+  );
+
+  // Optionally, adjust the light target to always point at Earth
+  directionalLight.target.position.set(0, 0, 0); // Centered on Earth
+  directionalLight.target.updateMatrixWorld();
+}
+
+function setSimulationTime(userDateTime) {
+  satelliteData.forEach((satellite, index) => {
+    const positionAndVelocity = satelliteJS.propagate(
+      satellite.satrec,
+      userDateTime
+    );
+    const eci = positionAndVelocity.position;
+    const gmst = satelliteJS.gstime(userDateTime);
+    const ecef = satelliteJS.eciToEcf(eci, gmst);
+    //console.log(formatDatetime(userDateTime));
+    // Update satellite position
+    satelliteMeshes[index].position.set(
+      ecef.x * 1000, // Convert km to meters
+      ecef.y * 1000,
+      ecef.z * 1000
+    );
+  });
+}
+
+function updateEarthRotation(userDateTime) {
+  const earthRotationSpeed = (2 * Math.PI) / (23.9345 * 3600 * 1000); // Earth rotation speed in radians per millisecond
+  const elapsedTime = new Date().getTime() - userDateTime.getTime();
+
+  // Calculate the rotation angle
+  const earthRotationAngle = elapsedTime * earthRotationSpeed;
+  earthMesh.rotation.y = earthRotationAngle;
 }
 
 // Function to create satellite meshes
@@ -113,23 +173,9 @@ function parseTleAndCalculateSatellites(tleFile) {
       positionAndVelocity.position &&
       !isNaN(positionAndVelocity.position.x)
     ) {
-      const eci = positionAndVelocity.position;
-      const gmst = satelliteJS.gstime(now);
-      const ecef = satelliteJS.eciToEcf(eci, gmst);
-
       // Push satellite data
       satelliteData.push({
         name: satelliteName,
-        x: ecef.x,
-        y: ecef.y,
-        z: ecef.z,
-        semiMajorAxis: satrec.a, // Convert km to meters
-        eccentricity: satrec.ecco,
-        inclination: satrec.inclo,
-        raan: satrec.nodeo,
-        argPerigee: satrec.argpo,
-        startTime: now,
-        orbitPeriod: (2 * Math.PI) / satrec.no,
         satrec: satrec,
       });
 
@@ -183,7 +229,6 @@ function createFilterEvents(data) {
     const inactive_satellites = data
       .filter((element) => element.is_active == 0)
       .map((element) => element.id);
-    //console.log(active_satellites);
     // Traverse the scene and update visibility of satellites
     scene.traverse((object) => {
       if (object.name) {
@@ -192,17 +237,13 @@ function createFilterEvents(data) {
         const isInactiveSatellite = inactive_satellites.includes(object.name);
 
         // Determine the visibility based on active or inactive filter states
-        //console.log("isInactiveSatellite", isInactiveSatellite);
-        //console.log("enabledSettings", enabledSettings);
         if (
           (enabledSettings.includes("active") && isActiveSatellite) ||
           (enabledSettings.includes("inactive") && isInactiveSatellite)
         ) {
           object.visible = true;
-          //console.log("object ", object, "is now visible");
         } else {
           object.visible = false;
-          //console.log("object ", object, "is now invisible");
         }
       }
     });
@@ -225,12 +266,14 @@ function createOrbitLine(satrec, satelliteName, numPoints = 100) {
     // Calculate the time offset (in minutes)
     const minutesOffset = (j / numPoints) * ((2 * Math.PI) / satrec.no);
     const futureDate = new Date(now.getTime() + minutesOffset * 60 * 1000); // Convert minutes to ms
+    console.log(formatDatetime(futureDate));
+
     // Propagate satellite position
     const positionAndVelocity = satelliteJS.propagate(satrec, futureDate);
     const eci = positionAndVelocity.position;
 
     if (eci) {
-      // Convert from ECI to ECEF using gmst
+      // Convert from ECI to ECEF using the updated gmst for futureDate
       const ecef = satelliteJS.eciToEcf(eci, gmst);
       orbitPoints.push(
         new THREE.Vector3(ecef.x * 1000, ecef.y * 1000, ecef.z * 1000)
@@ -245,7 +288,7 @@ function createOrbitLine(satrec, satelliteName, numPoints = 100) {
   // Create the line and add it to the scene
   const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
   orbitLine.name = satelliteName;
-  console.log(orbitLine.name);
+  //console.log(orbitLine.name);
   scene.add(orbitLine);
 }
 
@@ -262,39 +305,35 @@ controls.update();
 function animate() {
   requestAnimationFrame(animate);
 
-  const now = Date.now();
+  const now = performance.now(); // Get the current time in milliseconds
   const deltaTime = (now - lastUpdateTime) / 1000; // Time difference in seconds
   lastUpdateTime = now;
-  earthMesh.rotation.y += earthRotationSpeed * deltaTime;
-  // Update satellite positions based on parsed data
-  satelliteData.forEach((satellite, index) => {
-    //console.log("satrec", satellite.satrec);
-    const propagatedPositionAndVelocity = satelliteJS.propagate(
-      satellite.satrec,
-      new Date()
-    );
-    const eci = propagatedPositionAndVelocity.position;
-    const gmst = satelliteJS.gstime(new Date());
-    const ecef = satelliteJS.eciToEcf(eci, gmst);
 
-    satelliteMeshes[index].position.set(
-      ecef.x * 1000,
-      ecef.y * 1000,
-      ecef.z * 1000
+  // Only update currentDateTime if the simulation is not paused
+  if (!isPaused) {
+    // Add the deltaTime multiplied by timeSpeed to currentDateTime
+    currentDateTime = new Date(
+      currentDateTime.getTime() + deltaTime * 1000 * timeSpeed
     );
-    if (!satelliteMeshes[index].name) {
-      satelliteMeshes[index].name = satellite.name; // Name it to access it later with events
-      //console.log(satelliteMeshes);
-    }
-  });
+  }
+
+  // Update the displayed date in the UI
+  displayedDatetime.value = formatDatetime(currentDateTime); // e.g. 'yyyy-MM-ddThh:mm:ss'
+
+  // Propagate satellite positions based on the adjusted currentDateTime
+  setSimulationTime(currentDateTime);
+
+  // Update the Earth's rotation and Sunlight based on currentDateTime
+  updateEarthRotation(currentDateTime);
+  updateSunlight(currentDateTime);
 
   // Render the scene
   renderer.render(scene, camera);
   controls.update();
 }
+
 // Generate lights and earth
 generateLights();
-generateEarth();
 fetchSatelliteStatus();
 setupTimeControl();
 // Fetch TLE data and start the application

@@ -22,7 +22,7 @@ body {
   color: white;
   border: solid white 1px;
   position: absolute;
-  max-width: 20%;
+  max-width: 25%;
   min-width: 120px;
   padding: 0.7em;
   z-index: 100;
