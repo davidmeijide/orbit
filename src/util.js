@@ -1,9 +1,9 @@
 // yyyy-MM-ddThh:mm:ss
 export function formatDatetime(datetime) {
   let str = "";
-  str = `${datetime.getFullYear()}-${pad(datetime.getMonth() + 1)}-${pad(
+  str = `${datetime.getFullYear()}/${pad(datetime.getMonth() + 1)}/${pad(
     datetime.getDate()
-  )}T`;
+  )} `;
   str += `${pad(datetime.getHours())}:${pad(datetime.getMinutes())}:${pad(
     datetime.getSeconds()
   )}`;

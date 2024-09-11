@@ -3,6 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as satelliteJS from "satellite.js";
 import { formatDatetime } from "./util.js";
 
+console.log(formatDatetime(new Date(2020, 0, 1, 1, 1, 0)));
 // Global variables
 const satelliteData = [];
 const satelliteMeshes = [];
@@ -11,6 +12,7 @@ let timeSpeed = 1;
 let enabledSettings = [];
 let lastUpdateTime = performance.now();
 let currentDateTime = new Date(); // Default is now
+let startTime = new Date();
 const gmst = satelliteJS.gstime(currentDateTime);
 
 let directionalLight;
@@ -20,8 +22,8 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
-  0.1,
-  100000000
+  100,
+  1000000000
 );
 const earthRadius = 6371000; // Earth's radius in meters
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -40,14 +42,13 @@ function setupTimeControl() {
     //console.log(timeSpeed);
     if (event.target.value == 0) {
       shownValue.textContent = "Pause";
+      isPaused = true;
     } else {
       shownValue.textContent = timeSpeed + "x";
+      isPaused = false;
     }
   });
   const datetimeInput = document.querySelector("#datetime");
-  datetimeInput.addEventListener("blur", (e) => {
-    setSimulationTime(datetimeInput.value);
-  });
 }
 
 // Function to generate the Earth
@@ -86,25 +87,21 @@ function generateLights() {
   scene.add(directionalLight);
 }
 
-function updateSunlight(userDateTime) {
-  const daysSinceEpoch =
-    (userDateTime - new Date("2020-01-01T00:00:00Z")) / (1000 * 60 * 60 * 24);
-  const earthOrbitPeriod = 365.25; // Days for a full revolution
+function updateSunlight(currentDateTime) {
+  const daysSinceJ2000 =
+    (currentDateTime - new Date("2000-01-01T12:00:00Z")) /
+    (1000 * 60 * 60 * 24);
+  const solarMeanAnomaly =
+    (357.5291 + 0.98560028 * daysSinceJ2000) * (Math.PI / 180);
+  const eclipticLongitude =
+    (solarMeanAnomaly + 1.9148 * Math.sin(solarMeanAnomaly)) * (Math.PI / 180);
 
-  // Calculate the position of the Sun relative to Earth
-  const sunAngle = (daysSinceEpoch / earthOrbitPeriod) * 2 * Math.PI;
-  const sunDistance = 149.6e9; // Distance from Earth to Sun in meters (scaled)
+  // Use ecliptic longitude to position the light
+  const sunX = Math.cos(eclipticLongitude);
+  const sunY = 0; // Since the Earth orbits in the ecliptic plane, Y can be 0
+  const sunZ = Math.sin(eclipticLongitude);
 
-  // Set the light (Sun) position in space
-  directionalLight.position.set(
-    Math.cos(sunAngle) * sunDistance,
-    0,
-    Math.sin(sunAngle) * sunDistance
-  );
-
-  // Optionally, adjust the light target to always point at Earth
-  directionalLight.target.position.set(0, 0, 0); // Centered on Earth
-  directionalLight.target.updateMatrixWorld();
+  directionalLight.position.set(sunX * 100000, sunY * 100000, sunZ * 100000);
 }
 
 function setSimulationTime(userDateTime) {
@@ -114,21 +111,20 @@ function setSimulationTime(userDateTime) {
       userDateTime
     );
     const eci = positionAndVelocity.position;
-    //const gmst = satelliteJS.gstime(userDateTime);
     const ecef = satelliteJS.eciToEcf(eci, gmst);
-    console.log(formatDatetime(userDateTime));
     // Update satellite position
     satelliteMeshes[index].position.set(
       ecef.x * 1000, // Convert km to meters
       ecef.y * 1000,
       ecef.z * 1000
     );
+    satelliteMeshes[index].name = satellite.name;
   });
 }
 
 function updateEarthRotation(userDateTime) {
   const earthRotationSpeed = (2 * Math.PI) / (23.9345 * 3600 * 1000); // Earth rotation speed in radians per millisecond
-  const elapsedTime = new Date().getTime() - userDateTime.getTime();
+  const elapsedTime = userDateTime.getTime() - new Date().getTime();
 
   // Calculate the rotation angle
   const earthRotationAngle = elapsedTime * earthRotationSpeed;
@@ -138,7 +134,10 @@ function updateEarthRotation(userDateTime) {
 // Function to create satellite meshes
 function createSatelliteMesh(color) {
   const satelliteGeometry = new THREE.SphereGeometry(0.5e6, 32, 32); // Scale for visibility
-  const satelliteMaterial = new THREE.MeshBasicMaterial({ color });
+  const satelliteMaterial = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+  });
   const satelliteMesh = new THREE.Mesh(satelliteGeometry, satelliteMaterial);
   scene.add(satelliteMesh);
   return satelliteMesh;
@@ -260,14 +259,13 @@ function createFilterEvents(data) {
 function createOrbitLine(satrec, satelliteName, numPoints = 100) {
   const orbitPoints = [];
   const now = new Date(); // Start from the current time
-  const gmst = satelliteJS.gstime(now);
 
   // Loop over numPoints to generate the orbit
   for (let j = 0; j < numPoints; j++) {
     // Calculate the time offset (in minutes)
     const minutesOffset = (j / numPoints) * ((2 * Math.PI) / satrec.no);
     const futureDate = new Date(now.getTime() + minutesOffset * 60 * 1000); // Convert minutes to ms
-    console.log(formatDatetime(futureDate));
+    //console.log(formatDatetime(futureDate));
 
     // Propagate satellite position
     const positionAndVelocity = satelliteJS.propagate(satrec, futureDate);
@@ -319,7 +317,7 @@ function animate() {
   }
 
   // Update the displayed date in the UI
-  displayedDatetime.value = formatDatetime(currentDateTime); // e.g. 'yyyy-MM-ddThh:mm:ss'
+  displayedDatetime.textContent = formatDatetime(currentDateTime); // e.g. 'yyyy-MM-ddThh:mm:ss'
 
   // Propagate satellite positions based on the adjusted currentDateTime
   setSimulationTime(currentDateTime);
