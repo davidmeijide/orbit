@@ -55,26 +55,47 @@ function setupTimeControl() {
 function generateEarth() {
   const earthGroup = new THREE.Group();
   const textureLoader = new THREE.TextureLoader();
-  const earthTexture = textureLoader.load("img/earthmap4k.jpg");
+  const earthTexture = textureLoader.load(
+    "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthmap4k.jpg"
+  );
   const earthGeometry = new THREE.SphereGeometry(earthRadius, 64, 64);
   const earthMaterial = new THREE.MeshPhongMaterial({
     map: earthTexture,
-    specularMap: textureLoader.load("img/earthspec4k.jpg"),
-    bumpMap: textureLoader.load("img/earthbump4k.jpg"),
+    specularMap: textureLoader.load(
+      "https://raw.githubusercontent.com/davidmeijide/orbit/main/https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthspec4k.jpg"
+    ),
+    bumpMap: textureLoader.load(
+      "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthbump4k.jpg"
+    ),
     bumpScale: 0.04,
     transparent: false,
   });
   const earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
   earthGroup.add(earthMesh);
   const lightsMat = new THREE.MeshBasicMaterial({
-    map: textureLoader.load("img/earthlights2k.jpg"),
+    map: textureLoader.load(
+      "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthlights2k.jpg"
+    ),
     blending: THREE.AdditiveBlending,
   });
   const lightsMesh = new THREE.Mesh(earthGeometry, lightsMat);
   earthGroup.add(lightsMesh);
 
+  const cloudsMat = new THREE.MeshStandardMaterial({
+    map: loader.load("./textures/04_earthcloudmap.jpg"),
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending,
+    alphaMap: loader.load("./textures/05_earthcloudmaptrans.jpg"),
+    // alphaTest: 0.3,
+  });
+  const cloudsMesh = new THREE.Mesh(geometry, cloudsMat);
+  cloudsMesh.scale.setScalar(1.003);
+  earthGroup.add(cloudsMesh);
+
   // Earth's axial tilt (in radians, 23.5 degrees)
   earthGroup.rotation.z = -23.5 * (Math.PI / 180);
+
   scene.add(earthGroup);
   return earthMesh;
 }
