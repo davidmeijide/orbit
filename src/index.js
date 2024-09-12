@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as satelliteJS from "satellite.js";
 import { formatDatetime } from "./util.js";
+import { getFresnelMat } from "./getFresnelMat.js";
 
 console.log(formatDatetime(new Date(2020, 0, 1, 1, 1, 0)));
 // Global variables
@@ -29,6 +30,9 @@ const earthRadius = 6371000; // Earth's radius in meters
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
 const earthMesh = generateEarth();
 
@@ -58,23 +62,22 @@ function generateEarth() {
   const earthTexture = textureLoader.load(
     "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthmap4k.jpg"
   );
-  const earthGeometry = new THREE.SphereGeometry(earthRadius, 64, 64);
+  const earthGeometry = new THREE.IcosahedronGeometry(earthRadius, 12);
   const earthMaterial = new THREE.MeshPhongMaterial({
     map: earthTexture,
     specularMap: textureLoader.load(
-      "https://raw.githubusercontent.com/davidmeijide/orbit/main/https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthspec4k.jpg"
+      "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthspec4k.jpg"
     ),
     bumpMap: textureLoader.load(
       "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthbump4k.jpg"
     ),
     bumpScale: 0.04,
-    transparent: false,
   });
   const earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
   earthGroup.add(earthMesh);
   const lightsMat = new THREE.MeshBasicMaterial({
     map: textureLoader.load(
-      "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthlights2k.jpg"
+      "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthlights4k.jpg"
     ),
     blending: THREE.AdditiveBlending,
   });
@@ -82,22 +85,31 @@ function generateEarth() {
   earthGroup.add(lightsMesh);
 
   const cloudsMat = new THREE.MeshStandardMaterial({
-    map: loader.load("./textures/04_earthcloudmap.jpg"),
+    map: textureLoader.load(
+      "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthcloudmap.jpg"
+    ),
     transparent: true,
     opacity: 0.8,
     blending: THREE.AdditiveBlending,
-    alphaMap: loader.load("./textures/05_earthcloudmaptrans.jpg"),
+    alphaMap: textureLoader.load(
+      "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthcloudmaptrans.jpg"
+    ),
     // alphaTest: 0.3,
   });
-  const cloudsMesh = new THREE.Mesh(geometry, cloudsMat);
+  const cloudsMesh = new THREE.Mesh(earthGeometry, cloudsMat);
   cloudsMesh.scale.setScalar(1.003);
-  earthGroup.add(cloudsMesh);
+  //earthGroup.add(cloudsMesh);
+
+  const fresnelMat = getFresnelMat();
+  const glowMesh = new THREE.Mesh(earthGeometry, fresnelMat);
+  glowMesh.scale.setScalar(1.01);
+  earthGroup.add(glowMesh);
 
   // Earth's axial tilt (in radians, 23.5 degrees)
   earthGroup.rotation.z = -23.5 * (Math.PI / 180);
 
   scene.add(earthGroup);
-  return earthMesh;
+  return earthGroup;
 }
 
 // Function to generate lights
