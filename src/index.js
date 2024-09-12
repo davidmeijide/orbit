@@ -15,6 +15,7 @@ let lastUpdateTime = performance.now();
 let currentDateTime = new Date(); // Default is now
 let startTime = new Date();
 const gmst = satelliteJS.gstime(currentDateTime);
+const textureLoader = new THREE.TextureLoader();
 
 let directionalLight;
 const displayedDatetime = document.querySelector("#datetime");
@@ -35,7 +36,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
 const earthMesh = generateEarth();
-
+const starSphere = createStarSphere();
 //Event listeners
 
 function setupTimeControl() {
@@ -55,10 +56,27 @@ function setupTimeControl() {
   const datetimeInput = document.querySelector("#datetime");
 }
 
+function createStarSphere() {
+  const geometry = new THREE.SphereGeometry(earthRadius * 100, 64, 64); // Large radius to encompass the scene
+
+  // Load a star texture for the inside of the sphere
+  const starTexture = textureLoader.load(
+    "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/skybox_4k.jpg"
+  );
+  const material = new THREE.MeshBasicMaterial({
+    map: starTexture,
+    side: THREE.BackSide, // Render the inside of the sphere
+  });
+
+  const starSphere = new THREE.Mesh(geometry, material);
+  scene.add(starSphere);
+
+  return starSphere;
+}
+
 // Function to generate the Earth
 function generateEarth() {
   const earthGroup = new THREE.Group();
-  const textureLoader = new THREE.TextureLoader();
   const earthTexture = textureLoader.load(
     "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthmap4k.jpg"
   );
@@ -170,7 +188,7 @@ function updateEarthRotation(userDateTime) {
 function createSatelliteMesh() {
   const satelliteGeometry = new THREE.SphereGeometry(0.5e6, 32, 32); // Scale for visibility
   const satelliteMaterial = new THREE.MeshBasicMaterial({
-    color,
+    color: 0xffffff,
     transparent: true,
   });
   const satelliteMesh = new THREE.Mesh(satelliteGeometry, satelliteMaterial);
@@ -360,6 +378,7 @@ function animate() {
   // Update the Earth's rotation and Sunlight based on currentDateTime
   updateEarthRotation(currentDateTime);
   updateSunlight(currentDateTime);
+  starSphere.position.copy(camera.position);
 
   // Render the scene
   renderer.render(scene, camera);
