@@ -53,27 +53,29 @@ function setupTimeControl() {
 
 // Function to generate the Earth
 function generateEarth() {
+  const earthGroup = new THREE.Group();
   const textureLoader = new THREE.TextureLoader();
-  const earthTexture = textureLoader.load(
-    "https://raw.githubusercontent.com/bobbyroe/threejs-earth/main/textures/00_earthmap1k.jpg"
-  );
+  const earthTexture = textureLoader.load("img/earthmap4k.jpg");
   const earthGeometry = new THREE.SphereGeometry(earthRadius, 64, 64);
   const earthMaterial = new THREE.MeshPhongMaterial({
     map: earthTexture,
-    specularMap: textureLoader.load(
-      "https://raw.githubusercontent.com/bobbyroe/threejs-earth/main/textures/02_earthspec1k.jpg"
-    ),
-    bumpMap: textureLoader.load(
-      "https://raw.githubusercontent.com/bobbyroe/threejs-earth/main/textures/01_earthbump1k.jpg"
-    ),
+    specularMap: textureLoader.load("img/earthspec4k.jpg"),
+    bumpMap: textureLoader.load("img/earthbump4k.jpg"),
     bumpScale: 0.04,
     transparent: false,
   });
   const earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
+  earthGroup.add(earthMesh);
+  const lightsMat = new THREE.MeshBasicMaterial({
+    map: textureLoader.load("img/earthlights2k.jpg"),
+    blending: THREE.AdditiveBlending,
+  });
+  const lightsMesh = new THREE.Mesh(earthGeometry, lightsMat);
+  earthGroup.add(lightsMesh);
+
   // Earth's axial tilt (in radians, 23.5 degrees)
-  const earthTilt = THREE.MathUtils.degToRad(23.5);
-  earthMesh.rotation.z = earthTilt; // Tilt the Earth around the Z-axis
-  scene.add(earthMesh);
+  earthGroup.rotation.z = -23.5 * (Math.PI / 180);
+  scene.add(earthGroup);
   return earthMesh;
 }
 
