@@ -77,7 +77,7 @@ function generateEarth() {
   earthGroup.add(earthMesh);
   const lightsMat = new THREE.MeshBasicMaterial({
     map: textureLoader.load(
-      "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthlights4k.jpg"
+      "https://raw.githubusercontent.com/davidmeijide/orbit/main/img/earthlights2k.jpg"
     ),
     blending: THREE.AdditiveBlending,
   });
@@ -167,7 +167,7 @@ function updateEarthRotation(userDateTime) {
 }
 
 // Function to create satellite meshes
-function createSatelliteMesh(color) {
+function createSatelliteMesh() {
   const satelliteGeometry = new THREE.SphereGeometry(0.5e6, 32, 32); // Scale for visibility
   const satelliteMaterial = new THREE.MeshBasicMaterial({
     color,
@@ -215,7 +215,7 @@ function parseTleAndCalculateSatellites(tleFile) {
       });
 
       // Create the satellite mesh
-      const satelliteMesh = createSatelliteMesh(0xffff00);
+      const satelliteMesh = createSatelliteMesh();
       satelliteMeshes.push(satelliteMesh);
 
       // Create the orbit line
